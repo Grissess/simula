@@ -849,7 +849,7 @@ class Maximum(SimSchema):
         node.setOut('Q', max(node.getIn('I')))
 
 class Minimum(SimSchema):
-    '''Computes the minimum of all values in a list. An empty maximum results in a null value.'''
+    '''Computes the minimum of all values in a list. An empty minimum results in a null value.'''
     def __init__(self):
         SimSchema.__init__(self, 'Sequences', 'MIN', [
             Connector('I', list),
