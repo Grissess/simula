@@ -410,9 +410,9 @@ class SEditorWindow(QMainWindow):
 
     def docstring(self, schema):
         doc = type(schema).__doc__
-        doc = doc.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         if not doc:
             return '<i>No documentation.</i>'
+        doc = doc.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         doc = textwrap.fill(doc).replace('\n', '<br/>')
         doc = re.sub("\\`([^']*)\\'", '<i>\\1</i>', doc)
         return doc
