@@ -449,6 +449,8 @@ class SEditorWindow(QMainWindow):
 
     def fload(self):
         fname = QFileDialog.getOpenFileName(self, 'Open', '', self.FD_FILTER)[0]
+        if not fname:
+            return
         graph = SGraph()
         graph.restore(ET.parse(fname), SchemaRegistry.ALL, ConsumerRegistry.ALL, ProducerRegistry.ALL)
         self.tabs.addTab(SGraphicView(graph, SchemaRegistry.ALL.values(), fname), self.icons['sim'], os.path.basename(fname))
