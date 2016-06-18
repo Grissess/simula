@@ -5,6 +5,18 @@ from model import *
 from lib import SimSchema
 from sim import Property, Simulator
 
+class NPToArray(SimSchema):
+    '''Construct an ndarray out of the object I, and emits it at Q.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'NumPy', 'NP2AR', [
+            Connector('I'),
+        ], [
+            Connector('Q', np.ndarray)
+        ])
+
+    def step(self, node):
+        node.setOut('Q', np.array(node.getIn('I')))
+
 class NPZeroes(SimSchema):
     '''Constructs a zero-filled ndarray with shape S and data type T.'''
     def __init__(self):

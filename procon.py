@@ -64,7 +64,10 @@ else:
             self.voices = []
             self.midi = rtmidi2.MidiIn()
             self.midi.callback = self.message
-            self.midi.open_virtual_port(self.props['vpname'])
+            if self.props['client']:
+                self.midi.open_port(self.props['client'])
+            else:
+                self.midi.open_virtual_port(self.props['vpname'])
 
         def message(self, msg, time):
             msgtype, channel = rtmidi2.splitchannel(msg[0])

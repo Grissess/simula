@@ -347,6 +347,60 @@ class Not(SimSchema):
 
 ################################################################################
 
+class ToInteger(SimSchema):
+    '''Casts input I to an integer.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Conversion', '2INT', [
+            Connector('I'),
+        ], [
+            Connector('Q', int),
+        ])
+
+    def step(self, node):
+        node.setOut('Q', int(node.getIn('I')))
+
+class ToString(SimSchema):
+    '''Casts input I to a string.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Conversion', '2STR', [
+            Connector('I'),
+        ], [
+            Connector('Q', str),
+        ])
+
+    def step(self, node):
+        node.setOut('Q', str(node.getIn('I')))
+
+################################################################################
+
+class FileWrite(SimSchema):
+    '''Writes to the beginning of, or append to, `file' the string value of I on each tick, depending on the value of `append', and closes the file if `close' is a boolean truth.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Files', 'FIWR', [
+            Connector('I'),
+        ], [], [
+            Property('file', str, ''),
+            Property('append', int, 0),
+            Property('close', int, 0),
+        ])
+
+    def reset(self, node):
+        node.fp = open(node.getProp('file'), 'a' if node.getProp('append') else 'w')
+
+    def step(self, node):
+        if node.getProp('close'):
+            self.reset(node)
+        if not node.getProp('append'):
+            try:
+                node.fp.seek(0, 0)
+            except OSError:
+                node.fp = open(node.getProp('file'), 'w')
+        node.fp.write(str(node.getIn('I')))
+        if node.getProp('close'):
+            node.fp.close()
+
+################################################################################
+
 class Buffer(SimSchema):
     '''Emits its input, delayed by one simulation tick. This may be used in the default stepper (ParallelStepper) to synchronize inputs, and is otherwise useless. DelayBuffer provides more flexibility.'''
     def __init__(self):
@@ -574,9 +628,32 @@ class Integral(SimSchema):
         if node.getIn('R'):
             node.value = node.getIn('V')
         else:
-            node.value += d * (time.perf_counter() - node.lasttime)
+            node.value += node.getIn('d') * (time.perf_counter() - node.lasttime)
         node.setOut('Q', node.value)
         node.lasttime = time.perf_counter()
+
+class Accumulator(SimSchema):
+    '''Maintains an internal value (initially `init') and changes the value every tick by d. If R is a boolean truth, this internal value is unconditionally set to V. Emits the internal value.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'ACCM', [
+            Connector('d', float),
+            Connector('V', float),
+            Connector('R', bool),
+        ], [
+            Connector('Q', float),
+        ], [
+            Property('init', float, 0.0),
+        ])
+
+    def reset(self, node):
+        node.value = node.getProp('init')
+
+    def step(self, node):
+        if node.getIn('R'):
+            node.value = node.getIn('V')
+        else:
+            node.value += node.getIn('d')
+        node.setOut('Q', node.value)
 
 class Derivative(SimSchema):
     '''Takes the delta (as with Delta) between I and its previous value (initially `init'), and divides it by the change in time, giving a result in units per second.'''
