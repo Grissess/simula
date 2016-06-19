@@ -166,6 +166,7 @@ class StepperRegistry(type):
 
 class Stepper(object, metaclass=StepperRegistry):
     def reset(self, sim):
+        print('-- Stepper %r resets simulation %r --'%(self, sim))
         for node in sim.nodes:
             node.reset()
 
@@ -184,8 +185,8 @@ class ParallelStepper(Stepper):
 class TopologicalStepper(Stepper):
     def reset(self, sim):
         Stepper.reset(self, sim)
-        if not hasattr(self, 'order'):
-            self.order = []
+        if not hasattr(sim, 'order'):
+            sim.order = []
             deps = {node: functools.reduce(set.union, (set((i[0] for i in pairs)) for pairs in node.incoming.values()), set()) for node in sim.nodes}
             while True:
                 ordered = {node for node, dep in deps.items() if not dep}
@@ -193,16 +194,16 @@ class TopologicalStepper(Stepper):
                     if not deps:
                         break
                     ordered = {min(((node, len(dep)) for node, dep in deps.items()), key=lambda pair: pair[1])[0]}
-                self.order.extend(ordered)
+                sim.order.extend(ordered)
                 deps = {node: (dep - ordered) for node, dep in deps.items() if node not in ordered}
             print('----- Ordering -----')
-            for node in self.order:
+            for node in sim.order:
                 print(' - {} of {}'.format(node.schema, node))
             print('-'*80)
             assert not deps
 
     def step(self, sim):
-        for node in self.order:
+        for node in sim.order:
             node.step()
             node.advance()
 

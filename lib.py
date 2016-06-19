@@ -1063,8 +1063,11 @@ class Subsimulator(SimSchema):
     def reset(self, node):
         node.subsim = Simulator()
         tree = ET.parse(node.getProp('simfile'))
+        print('===== Loading %r as subsimulation %r... ====='%(node.getProp('simfile'), node.subsim))
         node.subsim.restore(tree, SchemaRegistry.ALL, ConsumerRegistry.ALL, ProducerRegistry.ALL)
+        print('===== ...done, simulation loaded with %r nodes ====='%(len(node.subsim.nodes),))
         node.subsim.reset()
+        print('===== (simulation %r reset) ====='%(node.getProp('simfile'),))
 
     def step(self, node):
         for ibus in node.getProp('inbusses').split(','):
@@ -1072,7 +1075,7 @@ class Subsimulator(SimSchema):
         node.subsim.step()
         node.subsim.advance()
         for obus in node.getProp('outbusses').split(','):
-            node.setOut(obus, node.subsim.bus[obus])
+            node.setOut(obus, node.subsim.bus.get(obus))
 
 class SubsimMap(SimSchema):
     '''Loads a simulation graph `simfile' relative to the current working directory. On each tick, accepts a list I, and the inputs given by the comma-separated list in `inbusses', and resets the subsimulation if `untilset' is 1; for each element of I, sets the bus named `inbus' to the element, `indexbus' to the index of the element, `listbus' to I, and each listed inbus to the value on the respective input; then runs the subsimulation for one tick if `untilset' is 0, or until a non-null value is produces on the `outbus' in up to `ticklimit' ticks, after at least `minticks' ticks have passed. At this point, the value produced on the subsimulation bus `outbus' is saved in the output list Q at the same index. Whitespace in `inbusses' will be included in bus names, and is not recommended. Q's length is always the same as I's.'''
