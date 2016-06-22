@@ -260,3 +260,38 @@ else:
                 if self.stream.get_write_available():
                     return 0
                 return self.props['leadratio'] * self.props['bufframes'] / self.props['rate']
+
+try:
+    import termios, tty
+except ImportError:
+    pass
+else:
+    import sys, atexit
+    class RawTeminalProducer(Producer):
+        PROPS = [
+            Property('kmapbus', str, 'termkmapi'),
+            Property('strbus', str, 'termstri'),
+        ]
+
+        def __init__(self):
+            Producer.__init__(self, 'RawTerminalProducer')
+
+        def reset(self, sim):
+            fd = sys.stdin.fileno()
+            old = termios.tcgetattr(fd)
+            tty.setraw(fd)
+            attrs = termios.tcgetattr(fd)
+            attrs[6][termios.VMIN] = b'\x00'
+            attrs[6][termios.VTIME] = b'\x00'
+            termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+            atexit.register(lambda: termios.tcsetattr(fd, termios.TCSADRAIN, old))
+
+        def step(self, sim):
+            buf = ''
+            data = sys.stdin.read(1)
+            while data:
+                buf += data
+                data = sys.stdin.read(1)
+            kmap = {k: True for k in buf}
+            sim.bus[self.props['kmapbus']] = kmap
+            sim.bus[self.props['strbus']] = buf

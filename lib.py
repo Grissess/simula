@@ -345,6 +345,48 @@ class Not(SimSchema):
     def step(self, node):
         node.setOut('Q', not node.getIn('I'))
 
+class EdgeDetect(SimSchema):
+    '''Emits True for exactly one tick when I goes from falsehood to truth (or truth to falsehood when `falling' is nonzero).'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Logic', 'EDGE', [
+            Connector('I', bool),
+        ], [
+            Connector('Q', bool)
+        ], [
+            Property('falling', int, 0),
+            Property('init', int, 0),
+        ])
+
+    def reset(self, node):
+        node.last = bool(node.getProp('init'))
+
+    def step(self, node):
+        val = node.getIn('I')
+        if node.getProp('falling'):
+            node.setOut('Q', node.last and not val)
+        else:
+            node.setOut('Q', val and not node.last)
+        node.last = val
+
+class LevelToggle(SimSchema):
+    '''Toggles Q between True and False while I is a boolean truth. (Use EdgeDetect for an edge toggle.)'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Logic', 'LTGL', [
+            Connector('I', bool),
+        ], [
+            Connector('Q', bool),
+        ], [
+            Property('init', int, 0)
+        ])
+
+    def reset(self, node):
+        node.value = bool(node.getProp('init'))
+
+    def step(self, node):
+        if node.getIn('I'):
+            node.value = not node.value
+        node.setOut('Q', node.value)
+
 ################################################################################
 
 class ToInteger(SimSchema):
@@ -370,6 +412,18 @@ class ToString(SimSchema):
 
     def step(self, node):
         node.setOut('Q', str(node.getIn('I')))
+
+class ToCharacter(SimSchema):
+    '''Casts I to a string consisting of a sole character or codepoint of I's value.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Conversion', '2CHR', [
+            Connector('I', int),
+        ], [
+            Connector('Q', str),
+        ])
+
+    def step(self, node):
+        node.setOut('Q', chr(node.getIn('I')))
 
 ################################################################################
 
@@ -399,6 +453,58 @@ class FileWrite(SimSchema):
         if node.getProp('close'):
             node.fp.close()
 
+class FileRead(SimSchema):
+    '''Reads strings from a file, delimited by `delim', or in lines if `delim' is empty. Emits the first such block at the beginning of a simulation, and advances to the next block whenever C is a truth. If B is a truth, seeks to byte I of the file and emits the next record; if R is a truth, seeks to record I of the file and emits it.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Files', 'FIRD', [
+            Connector('C', bool),
+            Connector('I', int),
+            Connector('B', bool),
+            Connector('R', bool),
+        ], [
+            Connector('Q', str),
+        ], [
+            Property('file', str, ''),
+            Property('delim', str, ''),
+        ])
+
+    def reset(self, node):
+        node.fp = open(node.getProp('file'), 'r')
+        node.buf = self.nextbuf(node)
+
+    def nextbuf(self, node):
+        delim = node.getProp('delim')
+        if not delim:
+            return node.fp.readline()
+        buf = ''
+        while True:
+            pos = node.tell()
+            data = node.fp.read(1024)
+            orig = len(buf)
+            buf += data
+            try:
+                idx = data.index(delim)
+            except ValueError:
+                pass
+            else:
+                break
+        buf = buf[:orig + idx]
+        node.fp.seek(pos + idx + len(delim))
+        return buf
+
+    def step(self, node):
+        if node.getIn('B'):
+            node.fp.seek(node.getIn('I'))
+            node.buf = self.nextbuf(node)
+        if node.getIn('R'):
+            node.fp.seek(0)
+            for i in range(node.getIn('I')):
+                self.nextbuf(node)
+            node.buf = self.nextbuf(node)
+        if node.getIn('C'):
+            node.buf = self.nextbuf(node)
+        node.setOut('Q', node.buf)
+
 ################################################################################
 
 class Buffer(SimSchema):
@@ -424,13 +530,15 @@ class DelayBuffer(SimSchema):
             Property('delay', int, 1, min=1)
         ])
 
+    def reset(self, node):
+        if node.getProp('delay') > 1:
+            node.delay_buffer = [None] * (node.getProp('delay') - 1)
+            node.delay_index = 0
+
     def step(self, node):
         if node.getProp('delay') <= 1:
             node.setOut('Q', node.getIn('I'))
             return
-        if not hasattr(node, 'delay_buffer'):
-            node.delay_buffer = [None] * (node.getProp('delay') - 1)
-            node.delay_index = 0
         node.delay_buffer[node.delay_index] = node.getIn('I')
         node.delay_index += 1
         if node.delay_index >= len(node.delay_buffer):
@@ -441,14 +549,38 @@ class DelayBuffer(SimSchema):
             node.delay_index = 0
 
 class Printer(SimSchema):
-    '''Prints the list consisting of all of its input values to stdout.'''
+    '''Prints all of its input values to stdout.'''
     def __init__(self):
         SimSchema.__init__(self, 'Generic', 'PRINT', [
             Connector('I', None, False),
         ], [])
 
     def step(self, node):
-        print(node.getIns('I'))
+        print(*node.getIns('I'))
+
+class PrintIf(SimSchema):
+    '''Prints all of the input values of I (in no particular order) to stdout if C is a boolean truth.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Generic', 'PRIF', [
+            Connector('I', None, False),
+            Connector('C', bool),
+        ], [])
+
+    def step(self, node):
+        if node.getIn('C'):
+            print(*node.getIns('I'))
+
+class IsNull(SimSchema):
+    '''Emits truth if I is a null value, and false otherwise.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Generic', 'NUL?', [
+            Connector('I'),
+        ], [
+            Connector('Q', bool),
+        ])
+
+    def step(self, node):
+        node.setOut('Q', node.getIn('I') is None)
 
 class SetBus(SimSchema):
     '''Sets the simulator bus named `bus' to the input value.'''
@@ -527,6 +659,15 @@ class Select(SimSchema):
         else:
             node.setOut('Q', node.getIn('F'))
 
+class End(SimSchema):
+    '''When C is a boolean truth, ends the simulation.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Generic', 'END', [Connector('C', bool)], [])
+
+    def step(self, node):
+        if node.getIn('C'):
+            node.graph.running = False
+
 ################################################################################
 
 class Sine(SimSchema):
@@ -574,6 +715,14 @@ class Ticks(SimSchema):
 
     def step(self, node):
         node.setOut('Q', node.graph.tick)
+
+class Init(SimSchema):
+    '''Emits True on the first tick of a simulation (including the first tick of an aggregate subsimulation), and False otherwise.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'INIT', [], [Connector('Q', bool)])
+
+    def step(self, node):
+        node.setOut('Q', node.graph.tick == 0)
 
 class Time(SimSchema):
     '''Returns real time in seconds since the epoch.'''
@@ -759,10 +908,91 @@ class RunningAverage(SimSchema):
             node.value = ((node.counter - 1) * node.value + node.getIn('I')) / node.counter
         node.setOut('Q', node.value)
 
+class LevelLatch(SimSchema):
+    '''When C is a boolean truth, outputs I; otherwise, emits the last value of I for which C was true.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'LLCH', [
+            Connector('I'),
+            Connector('C', bool),
+        ], [
+            Connector('Q'),
+        ])
+
+    def reset(self, node):
+        node.value = None
+
+    def step(self, node):
+        if node.getIn('C'):
+            node.value = node.getIn('I')
+        node.setOut('Q', node.value)
+
+class SRLatch(SimSchema):
+    '''When S but not R, sets an internal value to True; when R but not S, sets an internal value to false; emits the internal value.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'SRLCH', [
+            Connector('S', bool),
+            Connector('R', bool),
+        ], [
+            Connector('Q', bool),
+        ], [
+            Property('init', int, 0),
+        ])
+
+    def reset(self, node):
+        node.value = bool(node.getProp('init'))
+
+    def step(self, node):
+        r, s = node.getIn('R'), node.getIn('S')
+        if s and not r:
+            node.value = True
+        if r and not s:
+            node.value = False
+        node.setOut('Q', node.value)
+
+class RandomAccessMemory(SimSchema):
+    '''Maintains `cells' internal values, all initially null, and emits them as a list. When W is a truth, writes V to the Ith index of the internal memory.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'RAM', [
+            Connector('W', bool),
+            Connector('V'),
+            Connector('I', int),
+        ], [
+            Connector('Q', list),
+        ], [
+            Property('cells', int, 16),
+        ])
+
+    def reset(self, node):
+        node.mem = [None] * node.getProp('cells')
+
+    def step(self, node):
+        if node.getIn('W'):
+            node.mem[node.getIn('I')] = node.getIn('V')
+        node.setOut('Q', node.mem)
+
+class AssociativeMemory(SimSchema):
+    '''Maintains an internal mapping, and emits it; when W is a truth, associates K to V.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Time', 'ASM', [
+            Connector('W', bool),
+            Connector('K'),
+            Connector('V'),
+        ], [
+            Connector('Q', dict),
+        ])
+
+    def reset(self, node):
+        node.mem = {}
+
+    def step(self, node):
+        if node.getIn('W'):
+            node.mem[node.getIn('K')] = node.getIn('V')
+        node.setOut('Q', node.mem)
+
 ################################################################################
 
 class ListGetIndex(SimSchema):
-    '''Emits the element at index I of list L. If I is out of range, emits D instead. Non-integral values of I (including null) will emit the first element of the list.'''
+    '''Emits the element at index I of list L. If I is out of range, emits D instead. Non-numeric values of I (including null) will emit the first element of the list.'''
     def __init__(self):
         SimSchema.__init__(self, 'Sequences', 'LGIX', [
             Connector('L', list),
@@ -781,7 +1011,7 @@ class ListGetIndex(SimSchema):
             node.setOut('Q', node.getIn('D'))
 
 class ListSetIndex(SimSchema):
-    '''Emits a list which is the same as L, but with index I set to E. If I is out of range, emits L. Non-integral values of I (including null) set the first element of the list.'''
+    '''Emits a list which is the same as L, but with index I set to E. If I is out of range, emits L. Non-numeric values of I (including null) set the first element of the list.'''
     def __init__(self):
         SimSchema.__init__(self, 'Sequences', 'LSIX', [
             Connector('L', list),
@@ -1076,6 +1306,47 @@ class Subsimulator(SimSchema):
         node.subsim.advance()
         for obus in node.getProp('outbusses').split(','):
             node.setOut(obus, node.subsim.bus.get(obus))
+
+class SubsimIf(SimSchema):
+    '''Loads a simulation graph `simfile' relative to the current working directory; the inputs and outputs are named in the comma-separated lists `inbusses' and `outbusses', respectively. Included whitespace will be made part of the bus names, and should be avoided. Resets the subsimulation when the simulation resets. On each tick, if C is a boolean truth, loads the input values into the busses of the subsimulation, runs it by one tick, and emits the named busses to the outputs; otherwise, the subsimulation's state is not changed.'''
+    def __init__(self):
+        SimSchema.__init__(self, 'Subsimulation', 'SSIF', [
+            Connector('C', bool),
+        ], [], [
+            Property('simfile', str, ''),
+            Property('inbusses', str, ''),
+            Property('outbusses', str, ''),
+        ])
+
+    def getIns(self, node):
+        return self.ins + [Connector(name) for name in node.getProp('inbusses', '').split(',')]
+
+    def getInMap(self, node):
+        return {con.name: con for con in self.getIns(node)}
+
+    def getOuts(self, node):
+        return [Connector(name) for name in node.getProp('outbusses', '').split(',')]
+
+    def getOutMap(self, node):
+        return {con.name: con for con in self.getOuts(node)}
+
+    def reset(self, node):
+        node.subsim = Simulator()
+        tree = ET.parse(node.getProp('simfile'))
+        print('===== Loading %r as subsimulation %r... ====='%(node.getProp('simfile'), node.subsim))
+        node.subsim.restore(tree, SchemaRegistry.ALL, ConsumerRegistry.ALL, ProducerRegistry.ALL)
+        print('===== ...done, simulation loaded with %r nodes ====='%(len(node.subsim.nodes),))
+        node.subsim.reset()
+        print('===== (simulation %r reset) ====='%(node.getProp('simfile'),))
+
+    def step(self, node):
+        if node.getIn('C'):
+            for ibus in node.getProp('inbusses').split(','):
+                node.subsim.bus[ibus] = node.getIn(ibus)
+            node.subsim.step()
+            node.subsim.advance()
+            for obus in node.getProp('outbusses').split(','):
+                node.setOut(obus, node.subsim.bus.get(obus))
 
 class SubsimMap(SimSchema):
     '''Loads a simulation graph `simfile' relative to the current working directory. On each tick, accepts a list I, and the inputs given by the comma-separated list in `inbusses', and resets the subsimulation if `untilset' is 1; for each element of I, sets the bus named `inbus' to the element, `indexbus' to the index of the element, `listbus' to I, and each listed inbus to the value on the respective input; then runs the subsimulation for one tick if `untilset' is 0, or until a non-null value is produces on the `outbus' in up to `ticklimit' ticks, after at least `minticks' ticks have passed. At this point, the value produced on the subsimulation bus `outbus' is saved in the output list Q at the same index. Whitespace in `inbusses' will be included in bus names, and is not recommended. Q's length is always the same as I's.'''
