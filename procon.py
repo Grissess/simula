@@ -260,6 +260,50 @@ else:
                 if self.stream.get_write_available():
                     return 0
                 return self.props['leadratio'] * self.props['bufframes'] / self.props['rate']
+                
+        class NumPyAudioProducer(Producer):
+            PROPS = [
+                Property('sampbus', str, 'numpasampi'),
+                Property('atimebus', str, 'numpatimei'),
+                Property('rate', int, 44100),
+                Property('channels', int, 1, min=1),
+                Property('bufframes', int, 1024, min=1),
+                Property('device', int, -1),
+            ]
+
+            def __init__(self):
+                Producer.__init__(self, 'NumPyAudioProducer')
+
+            def reset(self, sim):
+                if not hasattr(sim, 'pyaudio'):
+                    sim.pyaudio = pyaudio.PyAudio()
+                self.stream = sim.pyaudio.open(
+                    rate = self.props['rate'],
+                    channels = self.props['channels'],
+                    frames_per_buffer = self.props['bufframes'],
+                    output_device_index = (self.props['device'] if self.props['device'] >= 0 else None),
+                    format = pyaudio.paFloat32,
+                    output = True
+                )
+                self.atime = 0.0
+                self.buffer = []
+
+            def step(self, sim):
+                period = 1.0 / self.props['rate']
+                avail = self.stream.get_read_available()
+                data = self.stream.read(avail)
+                frames = np.frombuffer(data, dtype=np.float32)
+                times = np.linspace(self.atime, self.atime + avail * period, avail, endpoint = False, dtype = np.float32)
+                sim.bus[self.props['atimebus']] = times
+                sum.bus[self.props['sampbus']] = frames
+                if len(times):
+                    self.atime = times[-1] + period
+
+            def advance(self, sim):
+                pass
+
+            def delayNeeded(self, sim):
+                pass
 
 try:
     import termios, tty

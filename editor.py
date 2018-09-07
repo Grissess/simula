@@ -414,7 +414,7 @@ class SEditorWindow(QMainWindow):
             return '<i>No documentation.</i>'
         doc = doc.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         doc = textwrap.fill(doc).replace('\n', '<br/>')
-        doc = re.sub("\\`([^']*)\\'", '<i>\\1</i>', doc)
+        doc = re.sub("\\`([^']*)\\'", '<b>\\1</b>', doc)
         return doc
 
     def closeTab(self, idx):

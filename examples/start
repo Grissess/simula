@@ -1,0 +1,1 @@
+<graph><nodes><node id="140611323962088" schema="TICK"><co x="-674.5608069279925" y="-657.214957606987" /><out name="Q"><edge in="I" to="140611338773784" /></out><props /></node><node id="140611338773784" schema="PRINT"><co x="-402.0" y="-680.0" /><props /></node></nodes><consumers /><producers /><stepper name="TopologicalStepper" /><rate rate="10.0" /></graph>
